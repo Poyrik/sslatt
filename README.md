@@ -102,6 +102,28 @@ ACCESS_TOKEN_SECRET=random ass string
 REFRESH_TOKEN_SECRET=random ass string
 ```
 
+#### Security settings
+
+```shell
+# ACCESS_TOKEN_SECRET must be at least 32 random characters. It signs session
+# tokens and (through HKDF) also keys the captcha/endgame cookies; the app
+# refuses to start the captcha flow with a missing or short secret.
+
+# Hostnames (comma separated) this site is served from. Needed when the app
+# sits behind a reverse proxy that rewrites the Host header (e.g. an onion
+# service in front of Next.js): POSTs whose Origin is not the request host or
+# one of these are rejected as cross-site (CSRF protection).
+ALLOWED_HOSTS=youronionaddress.onion,www.example.com
+
+# Cookies are HttpOnly + SameSite=Lax, and Secure in production. If you serve
+# over plain http (common for onion services) set this to false, otherwise
+# browsers will not send the Secure cookies back.
+COOKIE_SECURE=false
+
+# Max avatar/listing image upload size in bytes (default 5 MB, images only)
+MAX_UPLOAD_BYTES=5242880
+```
+
 #### Database and Storage
 
 Set up couchbase and redis

@@ -7,7 +7,7 @@ import VerticalSideBar from '@/components/sidebar/SideBar';
 
 const AdminLayout = ({ children }: any) => {
   return (
-    <LayoutPage auth>
+    <LayoutPage auth admin>
       <Layout display={Display.Flex} fullWidth>
         <VerticalSideBar client={false} isOpen={false} />
         <Layout fullWidth>{children}</Layout>

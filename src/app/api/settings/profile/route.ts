@@ -3,7 +3,7 @@ import { addSeconds } from 'date-fns';
 import { identity, pickBy } from 'lodash';
 import _get from 'lodash/get';
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import type { NextRequest } from 'next/server';
 
 import type { ResType } from '@/components/types.generated';
@@ -11,13 +11,14 @@ import { getClient } from '@/lib/apollo-wrapper.server';
 import { saveFileToLocal, uploadFilesApiRest } from '@/lib/hooksServer/media';
 import { getMe } from '@/lib/hooksServer/user';
 import { escapeText } from '@/lib/utils/text';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
 
 const baseUrl = '/html/profile';
 
 export async function GET() {
   const res = new Response(null, {
     headers: {
-      Refresh: `10; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 10),
     },
   });
 
@@ -141,7 +142,7 @@ export async function POST(req: NextRequest) {
 
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
+        Refresh: refreshHeader(pathname, 0),
       },
     });
   } catch (error: any) {
@@ -149,14 +150,14 @@ export async function POST(req: NextRequest) {
     const message = (error && error?.message) || `Failed to update profile`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(pathname, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

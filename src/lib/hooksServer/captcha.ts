@@ -1,6 +1,6 @@
 import { CaptchaGenerator } from 'captcha-canvas';
 
-import { saveKeyToLocalhost } from './rate-limit.redis';
+import { saveRedisKey } from '@/lib/redis';
 
 const isEmpty = (val: any) => {
   return (
@@ -35,7 +35,7 @@ export const saveCaptchaToRedis = async (
   captchaString: string,
 ): Promise<Boolean> => {
   try {
-    await saveKeyToLocalhost(iv, captchaString, 60, false);
+    await saveRedisKey(`captcha:${iv}`, captchaString, 60, false);
     return true;
   } catch (error) {
     console.log('saveCaptchaToRedis error', error);
@@ -53,17 +53,45 @@ function hex2ab(hexString: string): Uint8Array {
   return uint8Array;
 }
 
+let cachedKey: CryptoKey | undefined;
+let cachedKeySecret: string | undefined;
+
+/**
+ * Derives the AES-GCM key with HKDF-SHA256 from ACCESS_TOKEN_SECRET.
+ * A separate `info` label keeps this key independent from the JWT signing use
+ * of the same secret. Throws if the secret is missing or too short.
+ */
 export const importKey = async () => {
   const secretEnv = process.env.ACCESS_TOKEN_SECRET || '';
-  const secret = new TextEncoder().encode(
-    (secretEnv + secretEnv).substring(0, 32),
+  if (secretEnv.length < 32) {
+    throw new Error('ACCESS_TOKEN_SECRET must be set and at least 32 chars');
+  }
+
+  if (cachedKey && cachedKeySecret === secretEnv) return cachedKey;
+
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secretEnv),
+    'HKDF',
+    false,
+    ['deriveKey'],
   );
 
-  const key = await crypto.subtle.importKey('raw', secret, 'AES-GCM', true, [
-    'encrypt',
-    'decrypt',
-  ]);
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new TextEncoder().encode('sslatt-captcha-salt-v1'),
+      info: new TextEncoder().encode('sslatt-captcha-aes-gcm-v1'),
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
 
+  cachedKey = key;
+  cachedKeySecret = secretEnv;
   return key;
 };
 

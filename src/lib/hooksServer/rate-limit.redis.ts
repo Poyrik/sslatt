@@ -1,74 +1,37 @@
 import { addMinutes, differenceInSeconds } from 'date-fns';
 
-const baseUrl = 'http://localhost:3000';
+import { getInternalToken, INTERNAL_HEADER } from '@/lib/internalAuth';
 
-const isEmpty = (val: any) => {
-  return (
-    val === null ||
-    val === undefined ||
-    val === '' ||
-    val === undefined ||
-    val === null ||
-    !val
-  );
-};
+// The Edge middleware cannot use ioredis (Node only), so counters are bumped
+// through an internal, secret-protected route that only increments `rl:*` keys.
+const getBaseUrl = () => `http://127.0.0.1:${process.env.PORT || 3000}`;
 
 type Options = {
   minutes: number;
 };
 
-const getKeyFromLocalhost = async (
+const bumpCounter = async (
   key: string,
-): Promise<string | undefined> => {
-  const appUrl = `${baseUrl}/xcaptcha/key?json=false&key=${key}`;
+  ttlSeconds: number,
+): Promise<number | undefined> => {
   try {
-    const fetchRes = await fetch(appUrl, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const dataBody = await fetchRes.json();
-
-    return dataBody.data;
-  } catch (error) {
-    console.log('getKeyFromLocalhost error', error);
-    return undefined;
-  }
-};
-
-export const saveKeyToLocalhost = async (
-  key: string,
-  data: any,
-  expires?: number,
-  json = true,
-): Promise<string | undefined> => {
-  const appUrl = `${baseUrl}/xcaptcha/key`;
-
-  try {
-    const saveData = {
-      key,
-      data,
-      expire: expires,
-      json,
-    };
-
-    const fetchRes = await fetch(appUrl, {
+    const fetchRes = await fetch(`${getBaseUrl()}/xcaptcha/rl`, {
       method: 'POST',
-      body: JSON.stringify(saveData),
       headers: {
         'Content-Type': 'application/json',
+        [INTERNAL_HEADER]: await getInternalToken(),
       },
+      body: JSON.stringify({ key, ttl: ttlSeconds }),
     });
 
     if (!fetchRes.ok) {
-      throw new Error('saveKeyToLocalhost failed');
+      throw new Error(`rate limit counter failed: ${fetchRes.status}`);
     }
 
-    return fetchRes.statusText;
+    const { count } = await fetchRes.json();
+    return Number(count);
   } catch (error) {
-    console.log('saveKeyToLocalhost error', error);
+    console.log('rateLimit bumpCounter error', error);
     return undefined;
   }
 };
@@ -80,36 +43,21 @@ export default function rateLimit(options?: Options) {
     differenceInSeconds(addMinutes(new Date(), interval), new Date());
 
   return {
+    /** Returns true when the request is allowed, false when rate limited. */
     check: async (headers: Headers, limit: number, token: string) => {
-      const tokenRedis = await getKeyFromLocalhost(token);
+      const currentUsage = await bumpCounter(token, timeExpire());
 
-      const isNewToken = isEmpty(tokenRedis);
-      let tokenCount = (tokenRedis && (+tokenRedis as number)) || 0;
+      // If the counter is unreachable we fail open so an outage does not lock
+      // every user out; the failure is logged above.
+      if (currentUsage === undefined) return true;
 
-      tokenCount += 1;
-
-      const currentUsage = tokenCount;
       const isRateLimited = currentUsage >= limit;
-
-      console.log('isRateLimited', {
-        token,
-        currentUsage,
-        limit,
-      });
 
       headers.set('X-RateLimit-Limit', `${limit}`);
       headers.set(
         'X-RateLimit-Remaining',
         `${isRateLimited ? 0 : limit - currentUsage}`,
       );
-
-      if (!isRateLimited) {
-        await saveKeyToLocalhost(
-          token,
-          tokenCount,
-          !isNewToken ? undefined : (timeExpire() as any),
-        );
-      }
 
       return !isRateLimited;
     },

@@ -1,12 +1,13 @@
 'use server';
 
 import { addSeconds } from 'date-fns';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import { type NextRequest } from 'next/server';
 
 import type { LoginResponse } from '@/components/types.generated';
 import { getClient } from '@/lib/apollo-wrapper.server';
 import { PW_RESET_MUTATION } from '@/lib/gql/auth';
+import { flashCookie } from '@/lib/redirect';
 
 export async function GET() {
   const res = new Response(null, {
@@ -94,14 +95,14 @@ export async function POST(req: NextRequest) {
     const message = (error && error?.message) || `Failed to reset password`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=html/forgot-password/2fa`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: '0; url=/html/forgot-password/2fa',
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

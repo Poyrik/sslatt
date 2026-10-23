@@ -1,12 +1,16 @@
 'use server';
 
+import { awaitTo } from '@stoqey/client-graphql';
 import { addSeconds } from 'date-fns';
-import { cookies } from 'next/headers';
+import _get from 'lodash/get';
+import { cookies } from '@/lib/secureCookies';
 import { type NextRequest } from 'next/server';
 
-import type { ResType } from '@/components/types.generated';
+import type { PgpPublicKey, ResType } from '@/components/types.generated';
 import { getClient } from '@/lib/apollo-wrapper.server';
 import { VERIFY_NEW_KEY_MUTATION } from '@/lib/gql/auth';
+import { GET_PGP_KEY } from '@/lib/gql/auth/auth.query';
+import { flashCookie } from '@/lib/redirect';
 
 export async function GET() {
   const res = new Response(null, {
@@ -27,7 +31,15 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const cookieStore = cookies();
 
-    const verified = false; // get key some verified
+    // Whether this is a key *replacement* is decided by the backend (the
+    // account's current key state), never hardcoded or taken from the form.
+    const [, pgpKey] = await awaitTo(
+      getClient().query<{ data: PgpPublicKey }>({
+        query: GET_PGP_KEY,
+        fetchPolicy: 'no-cache',
+      }),
+    );
+    const verified = Boolean(_get(pgpKey, 'data.data.verified', false));
 
     const confirmCode = formData.get('confirmCode');
     const codeId = formData.get('codeId');
@@ -94,13 +106,13 @@ export async function POST(req: NextRequest) {
     const res = new Response(null, {
       headers: {
         Refresh: `0; url=/html/settings/pgp/verify`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

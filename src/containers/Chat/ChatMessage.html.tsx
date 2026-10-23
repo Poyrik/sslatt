@@ -47,7 +47,6 @@ export const ChatInputHtml = (props: ChatInputHtmlProps) => {
     <form action="/api/chat/message" method="POST">
       <input hidden defaultValue={pathname} name="pathname" />
       <input hidden defaultValue={convoId} name="convoId" />
-      <input hidden defaultValue={owner} name="owner" />
       <Layout fullWidth display={Display.Flex} background={Background.Base}>
         {/* TODO typing */}
 

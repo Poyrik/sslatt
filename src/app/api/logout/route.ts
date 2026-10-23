@@ -1,6 +1,6 @@
 'use server';
 
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 
 const knownCookieNames = [
   'userId',

@@ -1,7 +1,7 @@
 import { addSeconds } from 'date-fns';
 import _get from 'lodash/get';
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import type { NextRequest } from 'next/server';
 
 import type { ResType } from '@/components/types.generated';
@@ -9,6 +9,7 @@ import { orderActions } from '@/containers/Order/order.list.html.names';
 import { withdrawActions } from '@/containers/Withdraw/withdraw.actions.html.names';
 import { getClient } from '@/lib/apollo-wrapper.server';
 import { escapeText } from '@/lib/utils/text';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
 
 const actions: any = {
   order: orderActions,
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${refreshLink}`,
+        Refresh: refreshHeader(refreshLink, 0),
       },
     });
   } catch (error: any) {
@@ -133,14 +134,14 @@ export async function POST(req: NextRequest) {
 
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${refreshUrl}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(refreshUrl, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

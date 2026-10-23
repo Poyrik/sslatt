@@ -36,6 +36,7 @@ import React from 'react';
 
 import { PageNotFound } from '@/components/404s/NotFound';
 import { Container } from '@/components/container';
+import { renderMultiline } from '@/components/MultilineText';
 import type {
   OrderRatingOutput,
   UserType,
@@ -443,15 +444,9 @@ const UVAContainerHtml = (props: UVAContainerHtmlProps) => {
         {/* About */}
         {tab === 0 && (
           <Layout fullWidth padding={{ left: 2, right: 2, top: 1 }}>
-            <CoreText
-              as="h3"
-              fontWeight={FontWeight.Regular}
-              dangerouslySetInnerHTML={{
-                __html: (
-                  (isStore ? vendorAboutBio : aboutBio) || ''
-                ).replaceAll('\n', '<br />'),
-              }}
-            />
+            <CoreText as="h3" fontWeight={FontWeight.Regular}>
+              {renderMultiline(isStore ? vendorAboutBio : aboutBio)}
+            </CoreText>
           </Layout>
         )}
 

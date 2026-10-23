@@ -1,6 +1,7 @@
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import type { NextRequest } from 'next/server';
+import { refreshHeader } from '@/lib/redirect';
 
 export async function GET() {
   const res = new Response(null, {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   return new Response(null as any, {
     headers: {
       'Set-Cookie': `openSidebar=${newIsOpen}; path=/;`,
-      Refresh: `0; url=${!isEmpty(pathname) ? pathname : '/'}`,
+      Refresh: refreshHeader(pathname, 0, '/'),
     },
   });
 }

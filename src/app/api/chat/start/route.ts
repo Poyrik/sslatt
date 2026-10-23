@@ -4,13 +4,14 @@ import type { NextRequest } from 'next/server';
 
 import { startChatFromUsers } from '@/lib/hooksServer/chat';
 import { getMe } from '@/lib/hooksServer/user';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
 
 const baseUrl = '/html/chat';
 
 export async function GET(_req: NextRequest) {
   const res = new Response(null, {
     headers: {
-      Refresh: `10; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 10),
     },
   });
 
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     return new Response(null, {
       headers: {
-        Refresh: `0; url=/html/chat/${convoId}`,
+        Refresh: refreshHeader(`/html/chat/${encodeURIComponent(String(convoId))}`, 0, '/html/chat'),
       },
     });
   } catch (error: any) {
@@ -55,14 +56,14 @@ export async function POST(req: NextRequest) {
     const message = (error && error?.message) || `Failed to send message`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(pathname, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

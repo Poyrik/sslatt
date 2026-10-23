@@ -6,8 +6,10 @@ import type { NextFetchEvent, NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import rateLimit from '@/lib/hooksServer/rate-limit.redis';
+import { isAllowedOrigin } from '@/lib/origin';
 import { isLocalNetwork } from '@/lib/utils/url.util';
 
+import { isCrossSiteRequest } from './csrf';
 import { validateEndgameSession } from './endgame.utils';
 import type { MiddlewareFactory } from './stackHandler';
 
@@ -91,8 +93,8 @@ async function middleware(request: NextRequest, _next: any) {
   requestHeaders.set('x-url', reqUrl);
   // add the CORS headers to the response
   if (isProd) {
-    if (allowedOrigins.includes(userOrigin)) {
-      requestHeaders.set('Access-Control-Allow-Origin', allowedOrigins);
+    if (isAllowedOrigin(userOrigin, allowedOrigins)) {
+      requestHeaders.set('Access-Control-Allow-Origin', userOrigin);
     }
   } else {
     // dev
@@ -110,6 +112,11 @@ async function middleware(request: NextRequest, _next: any) {
   );
 
   try {
+    // CSRF: refuse cross-site state changing requests outright.
+    if (isCrossSiteRequest(request)) {
+      return Response.json('Forbidden', { status: 403 });
+    }
+
     const endgameCacheKey = getCacheKey(endgamex + endgamei);
 
     // ENDGAME ALL ROUTES

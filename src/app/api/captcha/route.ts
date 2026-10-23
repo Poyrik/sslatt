@@ -1,7 +1,7 @@
 import { awaitTo } from '@stoqey/client-graphql';
 import { addHours, addSeconds } from 'date-fns';
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import type { NextRequest } from 'next/server';
 
 import { getConfig } from '@/lib/config';
@@ -9,7 +9,9 @@ import {
   decryptCaptchaCode,
   encryptCaptchaCode,
 } from '@/lib/hooksServer/captcha';
-import { getCdnHost } from '@/lib/utils/api.utils';
+import { isAllowedOrigin } from '@/lib/origin';
+import { consumeRedisKey } from '@/lib/redis';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
 
 const baseUrl = '/';
 
@@ -30,7 +32,7 @@ export async function GET(req: NextRequest) {
     const resUrl = !hasJs ? '/html' : '/';
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${resUrl}`,
+        Refresh: refreshHeader(resUrl, 0),
         // 'Refresh': `0; url=/`,
       },
     });
@@ -38,47 +40,39 @@ export async function GET(req: NextRequest) {
 
   const res = new Response(null, {
     headers: {
-      Refresh: `10; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 10),
     },
   });
 
   return res;
 }
 
-export async function OPTIONS(request: Request) {
-  console.log('captcha api OPTIONS', request);
-  let allowedOrigins = '*';
-  if (isProd) {
-    allowedOrigins = new URL(getCdnHost()).hostname;
-  }
+const corsHeaders = (req: Request): Headers => {
+  const headers = new Headers();
+  const origin = req.headers.get('origin');
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
 
-  const requestHeaders = new Headers(request.headers);
-  const userOrigin = requestHeaders.get('origin') as string;
   if (isProd) {
-    if (allowedOrigins.includes(userOrigin)) {
-      requestHeaders.set('Access-Control-Allow-Origin', allowedOrigins);
+    // exact host match only, never a substring test
+    if (origin && isAllowedOrigin(origin, host)) {
+      headers.set('Access-Control-Allow-Origin', origin);
+      headers.set('Vary', 'Origin');
     }
   } else {
-    // dev
-    requestHeaders.set('Access-Control-Allow-Origin', allowedOrigins);
+    headers.set('Access-Control-Allow-Origin', '*');
   }
 
-  requestHeaders.set(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, OPTIONS',
-  );
-  requestHeaders.set(
+  headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  headers.set(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
+    'Content-Type, Accept, Accept-Version, X-Requested-With',
   );
-  requestHeaders.set('Access-Control-Max-Age', '86400');
+  headers.set('Access-Control-Max-Age', '86400');
+  return headers;
+};
 
-  const response = new Response(null, {
-    status: 200,
-    headers: requestHeaders,
-  });
-
-  return response;
+export async function OPTIONS(request: Request) {
+  return new Response(null, { status: 200, headers: corsHeaders(request) });
 }
 
 export async function POST(req: NextRequest) {
@@ -87,35 +81,11 @@ export async function POST(req: NextRequest) {
   let confirmCode = '';
   let hasJs = false;
   const sendError = (_message = '') => {
-    let allowedOrigins = '*';
-    if (isProd) {
-      allowedOrigins = new URL(getCdnHost()).hostname;
-    }
-
-    const requestHeaders = new Headers(req.headers);
-    const userOrigin = requestHeaders.get('origin') as string;
-    if (isProd) {
-      if (allowedOrigins.includes(userOrigin)) {
-        requestHeaders.set('Access-Control-Allow-Origin', allowedOrigins);
-      } else {
-        requestHeaders.set('Keep-Alive', 'timeout=10, max=1');
-      }
-    } else {
-      // dev
-      requestHeaders.set('Access-Control-Allow-Origin', allowedOrigins);
-    }
-    requestHeaders.set(
-      'Access-Control-Allow-Methods',
-      'GET, POST, PUT, DELETE, OPTIONS',
-    );
-    requestHeaders.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version',
-    );
-    requestHeaders.set('Access-Control-Max-Age', '86400');
-
-    console.log('captcha api Forbidden', { iv, encrypted, confirmCode });
-    return Response.json('Forbidden', { status: 403, headers: requestHeaders });
+    console.log('captcha api Forbidden');
+    return Response.json('Forbidden', {
+      status: 403,
+      headers: corsHeaders(req),
+    });
   };
   // TODO generic messages
   const cookieStore = cookies();
@@ -138,18 +108,17 @@ export async function POST(req: NextRequest) {
     confirmCode = formData.get('confirmCode') as string;
     if (isEmpty(confirmCode)) return sendError();
 
-    const variables = {
-      iv,
-      encrypted,
-      confirmCode,
-    };
-
-    console.log('captcha api args', variables);
-
     const [errorDecoding, decoded] = await awaitTo(
       decryptCaptchaCode(encrypted, iv),
     );
     if (errorDecoding) return sendError();
+
+    // Each captcha can be answered once: the stored image id is consumed on
+    // the first attempt (right or wrong), so a solved captcha can not be
+    // replayed to mint more sessions.
+    if (!/^[0-9a-f]{24}$/.test(iv)) return sendError();
+    const firstUse = await consumeRedisKey(`captcha:${iv}`);
+    if (!firstUse) throw new Error('Captcha expired, please try again');
 
     if (decoded.toLowerCase() !== confirmCode.toLowerCase())
       throw new Error('Invalid confirm code');
@@ -173,7 +142,7 @@ export async function POST(req: NextRequest) {
     const resUrl = !hasJs ? '/html' : '/';
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${resUrl}`,
+        Refresh: refreshHeader(resUrl, 0),
         // 'Refresh': `0; url=/`,
       },
     });
@@ -184,14 +153,14 @@ export async function POST(req: NextRequest) {
     const message = (error && error?.message) || `captcha failed`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${baseUrl}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(baseUrl, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

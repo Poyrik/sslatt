@@ -28,6 +28,12 @@ export class RedisCache {
     });
   }
 
+  /** Atomically deletes a key. Resolves true only if the key existed. */
+  async consume(key: string): Promise<boolean> {
+    const removed = await this.redis.del(key);
+    return removed === 1;
+  }
+
   async save(key: string, value: any, expire: number, json = true) {
     if (!expire) {
       console.log('save', 'no expire');
@@ -84,5 +90,19 @@ export const saveRedisKey = async (
   } catch (error) {
     console.log('saveKeyToLocalhost error', error);
     return undefined;
+  }
+};
+
+/**
+ * Single-use check: returns true exactly once per stored key (the first caller
+ * deletes it). Used to stop captcha replay.
+ */
+export const consumeRedisKey = async (key: string): Promise<boolean> => {
+  try {
+    if (isEmpty(key)) return false;
+    return await getRedisCache().consume(key);
+  } catch (error) {
+    console.log('consumeRedisKey error', error);
+    return false;
   }
 };

@@ -3,6 +3,7 @@ import { isEmpty } from 'lodash';
 import React from 'react';
 
 import { cdnPath } from '@/lib/utils/api.utils';
+import { renderMultiline } from '@/components/MultilineText';
 
 import type { ChatMessageItem } from './Chat.interfaces';
 
@@ -31,11 +32,7 @@ export function ChatItem(props: ChatMessageItem) {
         </Layout>
       </div>
       <div className="chat-bubble">
-        <CoreText
-          dangerouslySetInnerHTML={{
-            __html: (text || '').replaceAll('\n', '<br />'),
-          }}
-        />
+        <CoreText>{renderMultiline(text)}</CoreText>
       </div>
       {/* <div className="chat-footer opacity-50">
         <CoreText>Delivered ? Seen</CoreText>

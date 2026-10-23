@@ -2,18 +2,19 @@ import { GENERATE_WALLET_ADDRESS_MUTATION } from '@roadmanjs/wallet-client';
 import { addSeconds } from 'date-fns';
 import _get from 'lodash/get';
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import type { NextRequest } from 'next/server';
 
 import type { ResType } from '@/components/types.generated';
 import { getClient } from '@/lib/apollo-wrapper.server';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
 
 const baseUrl = '/html/wallet';
 
 export async function GET() {
   const res = new Response(null, {
     headers: {
-      Refresh: `10; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 10),
     },
   });
 
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
+        Refresh: refreshHeader(pathname, 0),
       },
     });
   } catch (error: any) {
@@ -69,14 +70,14 @@ export async function POST(req: NextRequest) {
       (error && error?.message) || `Failed to generating new address`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(pathname, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

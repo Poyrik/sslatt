@@ -184,6 +184,12 @@ const SslattIconDiv = styled.div<SslattIconProps>`
   }
 `;
 
+const UNSAFE_SVG =
+  /<\s*(script|foreignObject|iframe|object|embed|style\b[^>]*@import)|\son[a-z]+\s*=|javascript:|data:text\/html|<!ENTITY/i;
+
+const isSafeSvg = (svg: string): boolean =>
+  typeof svg === 'string' && svg.trim().startsWith('<svg') && !UNSAFE_SVG.test(svg);
+
 export const SslattIconSvgFile = (props: { scale?: number }) => {
   const scale = props.scale || 1;
   const width = 151 * scale;
@@ -195,6 +201,11 @@ export const SslattIconSvgFile = (props: { scale?: number }) => {
     svgText = svgText
       .replace('width="151"', `width="${width}"`)
       .replace('height="37"', `height="${height}"`);
+  }
+
+  // The SVG comes from site config. Refuse anything that could run script.
+  if (!isSafeSvg(svgText)) {
+    svgText = '';
   }
 
   return <SslattIconDiv dangerouslySetInnerHTML={{ __html: svgText }} />;

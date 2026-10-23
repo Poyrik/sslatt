@@ -1,9 +1,11 @@
+import { refreshHeader } from '@/lib/redirect';
+
 const baseUrl = '/';
 
 async function GET() {
   const res = new Response(null, {
     headers: {
-      Refresh: `0; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 0),
     },
   });
 

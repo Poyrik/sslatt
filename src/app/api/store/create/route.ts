@@ -1,18 +1,19 @@
 import { addSeconds } from 'date-fns';
 import _get from 'lodash/get';
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 
 import type { ResType } from '@/components/types.generated';
 import { getClient } from '@/lib/apollo-wrapper.server';
 import { CREATE_VENDOR_MUTATION } from '@/lib/gql';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
 
 const baseUrl = '/html/store';
 
 export async function GET() {
   const res = new Response(null, {
     headers: {
-      Refresh: `10; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 10),
     },
   });
 
@@ -48,7 +49,7 @@ export async function POST() {
 
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${baseUrl}`,
+        Refresh: refreshHeader(baseUrl, 0),
       },
     });
   } catch (error: any) {
@@ -56,14 +57,14 @@ export async function POST() {
     const message = (error && error?.message) || `Failed to create store`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${baseUrl}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(baseUrl, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }

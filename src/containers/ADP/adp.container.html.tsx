@@ -33,6 +33,7 @@ import React from 'react';
 import ImageGallery from 'react-image-gallery';
 
 import { PageNotFound } from '@/components/404s/NotFound';
+import { renderMultiline } from '@/components/MultilineText';
 import type {
   AdsListingOutput,
   OrderRatingOutput,
@@ -420,13 +421,9 @@ const ADPContainer = (props: ADPContainerHTMLProps) => {
         {/* About */}
         {tab === 0 && (
           <Layout fullWidth padding={{ left: 2, right: 2, top: 1 }}>
-            <CoreText
-              as="h3"
-              fontWeight={FontWeight.Regular}
-              dangerouslySetInnerHTML={{
-                __html: (description || '').replaceAll('\n', '<br />'),
-              }}
-            />
+            <CoreText as="h3" fontWeight={FontWeight.Regular}>
+              {renderMultiline(description)}
+            </CoreText>
           </Layout>
         )}
 

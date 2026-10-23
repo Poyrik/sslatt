@@ -33,8 +33,26 @@ export const parseCountryCode = (code?: string): string => {
   return code.toUpperCase();
 };
 
-export const escapeText = (text: any): string => {
-  if (!Number.isNaN(+text)) return text;
-  if (isEmpty(text) || !text) return '';
-  return validator.escape(text);
+/**
+ * HTML-escapes user supplied values. Strings are escaped; numbers/booleans pass
+ * through; arrays and plain objects are escaped recursively (so structured
+ * GraphQL arguments such as a withdrawal `{ amount, receiver }` keep their
+ * shape instead of being stringified); null/undefined are preserved.
+ */
+export const escapeText = (text: any): any => {
+  if (text === null || text === undefined) return text;
+  if (typeof text === 'number' || typeof text === 'boolean') return text;
+  if (typeof text === 'string') return text.length ? validator.escape(text) : '';
+
+  if (Array.isArray(text)) return text.map((item) => escapeText(item));
+
+  const proto = Object.getPrototypeOf(text);
+  if (typeof text === 'object' && (proto === Object.prototype || proto === null)) {
+    return Object.fromEntries(
+      Object.entries(text).map(([key, value]) => [key, escapeText(value)]),
+    );
+  }
+
+  // files, blobs, functions and other exotic values are not text
+  return '';
 };

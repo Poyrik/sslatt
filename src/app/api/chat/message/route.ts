@@ -2,19 +2,21 @@ import { CREATE_CHAT_MESSAGE_MUTATION } from '@roadmanjs/chat-client';
 import { addSeconds } from 'date-fns';
 import _get from 'lodash/get';
 import isEmpty from 'lodash/isEmpty';
-import { cookies } from 'next/headers';
+import { cookies } from '@/lib/secureCookies';
 import type { NextRequest } from 'next/server';
 
 import type { ResType } from '@/components/types.generated';
 import { getClient } from '@/lib/apollo-wrapper.server';
 import { escapeText } from '@/lib/utils/text';
+import { flashCookie, refreshHeader } from '@/lib/redirect';
+import { getSessionUserId } from '@/lib/session.server';
 
 const baseUrl = '/html/chat';
 
 export async function GET() {
   const res = new Response(null, {
     headers: {
-      Refresh: `10; url=${baseUrl}`,
+      Refresh: refreshHeader(baseUrl, 10),
     },
   });
 
@@ -40,7 +42,9 @@ export async function POST(req: NextRequest) {
     chatMessage = escapeText(chatMessage);
     const convoId = formData.get('convoId');
     if (isEmpty(convoId)) throw new Error('Invalid conversation');
-    const owner = formData.get('owner');
+    // Sender identity comes from the verified session, never from the form
+    // (a hidden `owner` field is attacker controlled).
+    const owner = await getSessionUserId();
     if (isEmpty(owner)) throw new Error('Invalid sender');
 
     // TODO vendor data
@@ -72,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     return new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
+        Refresh: refreshHeader(pathname, 0),
       },
     });
   } catch (error: any) {
@@ -80,14 +84,14 @@ export async function POST(req: NextRequest) {
     const message = (error && error?.message) || `Failed to send message`;
     const res = new Response(null, {
       headers: {
-        Refresh: `0; url=${pathname}`,
-        'Set-Cookie': `message=${message}; path=/; expires=${in3SecsStr}`,
+        Refresh: refreshHeader(pathname, 0),
+        'Set-Cookie': flashCookie('message', message, in3SecsStr),
       },
     });
 
     res.headers.append(
       'Set-Cookie',
-      `success=false; path=/; expires=${in3SecsStr}`,
+      flashCookie('success', 'false', in3SecsStr),
     );
     return res;
   }
